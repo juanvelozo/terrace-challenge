@@ -8,7 +8,7 @@ export const ResponseTime: React.FC<ResponseTimeProps> = ({ responseTime }) => {
             <span className="text-sm text-white font-medium 700 ">
                 Tiempo de respuesta:
             </span>
-            <span className="text-lg font-bold text-green-800 ">
+            <span className="text-md font-bold text-green-800 ">
                 {" " + responseTime}ms
             </span>
         </Chip>
