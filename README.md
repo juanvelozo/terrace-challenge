@@ -101,6 +101,33 @@ npm run build
 npm start
 ```
 
+## 🐳 Docker
+
+### Usando Docker
+
+```bash
+# Construir la imagen
+docker build -t orderbook-viewer .
+
+# Ejecutar el contenedor
+docker run -p 3000:3000 orderbook-viewer
+```
+
+### Usando Docker Compose
+
+```bash
+# Construir y ejecutar
+docker-compose up -d
+
+# Ver logs
+docker-compose logs -f
+
+# Detener
+docker-compose down
+```
+
+La aplicación estará disponible en [http://localhost:3000](http://localhost:3000)
+
 ## 🎯 Características Técnicas
 
 ### API Client Genérico
