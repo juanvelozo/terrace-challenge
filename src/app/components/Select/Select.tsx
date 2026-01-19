@@ -1,10 +1,8 @@
 "use client";
+import React from 'react';
 import { Select, SelectItem } from "@heroui/react";
 
-/**
- * Componente Select genérico y type-safe con autocomplete
- */
-export function SelectComponent<T extends object>(props: {
+interface SelectComponentProps<T extends object> {
     data: T[];
     keyProperty: keyof T;
     primaryTextKey: keyof T;
@@ -13,7 +11,13 @@ export function SelectComponent<T extends object>(props: {
     placeholder?: string;
     className?: string;
     onSelectionChange?: (key: string | number) => void;
-}) {
+}
+
+/**
+ * Componente Select genérico y type-safe con autocomplete
+ * Memoizado para evitar re-renders innecesarios
+ */
+function SelectComponentInner<T extends object>(props: SelectComponentProps<T>) {
     const {
         data,
         keyProperty,
@@ -66,3 +70,5 @@ export function SelectComponent<T extends object>(props: {
         </Select>
     );
 }
+
+export const SelectComponent = SelectComponentInner as <T extends object>(props: SelectComponentProps<T>) => React.ReactElement;

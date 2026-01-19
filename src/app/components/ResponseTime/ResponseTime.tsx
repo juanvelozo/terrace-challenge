@@ -1,8 +1,8 @@
-import React from 'react'
+import { memo } from 'react'
 import { ResponseTimeProps } from './types';
 import { Chip } from "@heroui/chip";
 
-export const ResponseTime: React.FC<ResponseTimeProps> = ({ responseTime }) => {
+export const ResponseTime = memo<ResponseTimeProps>(({ responseTime }) => {
     return (
         <Chip color="success" variant="solid">
             <span className="text-sm text-white font-medium 700 ">
@@ -12,6 +12,7 @@ export const ResponseTime: React.FC<ResponseTimeProps> = ({ responseTime }) => {
                 {" " + responseTime}ms
             </span>
         </Chip>
+    );
+});
 
-    )
-}
+ResponseTime.displayName = 'ResponseTime';
