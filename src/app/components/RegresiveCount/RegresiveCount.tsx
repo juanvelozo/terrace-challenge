@@ -22,44 +22,14 @@ export const RegresiveCount = forwardRef<RegresiveCountRef, RegresiveCountProps>
         const [isPaused, setIsPaused] = useState(false);
         const intervalRef = useRef<NodeJS.Timeout | null>(null);
         const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+        const onFinishRef = useRef(onFinish);
 
-        const startCountdown = useCallback(() => {
-            setSeconds(duration);
-            setIsExecuting(false);
+        // Mantener la referencia actualizada de onFinish
+        useEffect(() => {
+            onFinishRef.current = onFinish;
+        }, [onFinish]);
 
-            if (intervalRef.current) {
-                clearInterval(intervalRef.current);
-            }
-            if (timeoutRef.current) {
-                clearTimeout(timeoutRef.current);
-            }
-
-            intervalRef.current = setInterval(() => {
-                setSeconds((prev) => {
-                    if (prev <= 1) {
-                        // Detener el interval al llegar a 0
-                        if (intervalRef.current) {
-                            clearInterval(intervalRef.current);
-                        }
-                        return 0;
-                    }
-                    return prev - 1;
-                });
-            }, 1000); // Actualizar cada segundo
-        }, [duration]);
-
-        const reset = () => {
-            if (intervalRef.current) {
-                clearInterval(intervalRef.current);
-            }
-            if (timeoutRef.current) {
-                clearTimeout(timeoutRef.current);
-            }
-            setIsPaused(false);
-            startCountdown();
-        };
-
-        const pause = () => {
+        const clearTimers = useCallback(() => {
             if (intervalRef.current) {
                 clearInterval(intervalRef.current);
                 intervalRef.current = null;
@@ -68,56 +38,87 @@ export const RegresiveCount = forwardRef<RegresiveCountRef, RegresiveCountProps>
                 clearTimeout(timeoutRef.current);
                 timeoutRef.current = null;
             }
-            setIsPaused(true);
-        };
+        }, []);
 
-        const resume = () => {
-            if (!isPaused) return;
+        const startCountdown = useCallback(() => {
+            clearTimers();
+            setSeconds(duration);
+            setIsExecuting(false);
             setIsPaused(false);
 
-            // Continuar desde donde quedó
             intervalRef.current = setInterval(() => {
                 setSeconds((prev) => {
-                    if (prev <= 1) {
+                    const nextValue = prev - 1;
+                    if (nextValue <= 0) {
                         if (intervalRef.current) {
                             clearInterval(intervalRef.current);
+                            intervalRef.current = null;
                         }
                         return 0;
                     }
-                    return prev - 1;
+                    return nextValue;
                 });
             }, 1000);
-        };
+        }, [duration, clearTimers]);
+
+        const reset = useCallback(() => {
+            startCountdown();
+        }, [startCountdown]);
+
+        const pause = useCallback(() => {
+            clearTimers();
+            setIsPaused(true);
+        }, [clearTimers]);
+
+        const resume = useCallback(() => {
+            if (!isPaused) return;
+            setIsPaused(false);
+
+            intervalRef.current = setInterval(() => {
+                setSeconds((prev) => {
+                    const nextValue = prev - 1;
+                    if (nextValue <= 0) {
+                        if (intervalRef.current) {
+                            clearInterval(intervalRef.current);
+                            intervalRef.current = null;
+                        }
+                        return 0;
+                    }
+                    return nextValue;
+                });
+            }, 1000);
+        }, [isPaused]);
 
         // Exponer los métodos
         useImperativeHandle(ref, () => ({
             reset,
             pause,
             resume,
-        }));
+        }), [reset, pause, resume]);
 
         // Ejecutar onFinish DESPUÉS de mostrar el 100% por 1 segundo
         useEffect(() => {
-            if (seconds === 0 && !isExecuting) {
-                // Esperar 1 segundo antes de ejecutar onFinish
-                timeoutRef.current = setTimeout(() => {
+            if (seconds === 0 && !isExecuting && !isPaused) {
+                timeoutRef.current = setTimeout(async () => {
                     setIsExecuting(true);
-
-                    const executeFinish = async () => {
-                        try {
-                            await onFinish();
-                        } catch (error) {
-                            console.error('Error en onFinish:', error);
-                        } finally {
-                            // Reiniciar después de ejecutar
-                            startCountdown();
-                        }
-                    };
-
-                    executeFinish();
-                }, 1000); // Esperar 1 segundo mostrando el 100%
+                    try {
+                        await onFinishRef.current();
+                    } catch (error) {
+                        console.error('Error en onFinish:', error);
+                    } finally {
+                        setIsExecuting(false);
+                        startCountdown();
+                    }
+                }, 1000);
             }
-        }, [seconds, isExecuting, onFinish, startCountdown]);
+
+            return () => {
+                if (timeoutRef.current) {
+                    clearTimeout(timeoutRef.current);
+                    timeoutRef.current = null;
+                }
+            };
+        }, [seconds, isExecuting, isPaused, startCountdown]);
 
         // Iniciar countdown al montar
         useEffect(() => {
@@ -131,7 +132,8 @@ export const RegresiveCount = forwardRef<RegresiveCountRef, RegresiveCountProps>
                     clearTimeout(timeoutRef.current);
                 }
             };
-        }, [startCountdown]);
+            // eslint-disable-next-line react-hooks/exhaustive-deps
+        }, []);
 
         // Calcular el porcentaje discreto
         // duration=3: 3s=0%, 2s=33%, 1s=66%, 0s=100%
