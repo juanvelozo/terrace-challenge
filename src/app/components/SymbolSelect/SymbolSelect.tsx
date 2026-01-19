@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useRef } from 'react';
 import { Skeleton } from "@heroui/skeleton";
-import { Table, TableHeader, TableColumn, TableBody, TableRow, TableCell, Tabs, Tab, Select, SelectItem } from "@heroui/react";
+import { Table, TableHeader, TableColumn, TableBody, TableRow, TableCell, Tabs, Tab, Select, SelectItem, Progress } from "@heroui/react";
 import { SelectComponent } from '../Select';
 import { RegresiveCount, type RegresiveCountRef } from '../RegresiveCount';
 import { SpreadIndicator } from '../SpreadIndicator';
@@ -53,8 +53,6 @@ export function SymbolSelect({
       if (result.success && result.data) {
         setOrderBook(result.data);
         setResponseTime(result.responseTime || 0);
-        console.log(`Order book de ${symbolKey}:`, result.data);
-        console.log(`Tiempo de respuesta: ${result.responseTime}ms`);
 
         // Marcar que ya no es la carga inicial
         if (isInitialLoad) {
@@ -62,6 +60,7 @@ export function SymbolSelect({
         }
       } else {
         console.error('Error al obtener order book:', result.error);
+        alert(`Error al obtener order book: ${result.error}`);
       }
 
       // Quitar el estado de refetching
@@ -111,154 +110,199 @@ export function SymbolSelect({
         </div>
       )}
 
-      {orderBook && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <h3 className="text-lg font-semibold text-zinc-900 dark:text-white">
-                Order Book
-              </h3>
-              {isRefetching && (
-                <span className="text-xs text-blue-500 dark:text-blue-400 animate-pulse">
-                  Actualizando...
-                </span>
-              )}
+      {orderBook && (() => {
+        // Calcular volúmenes máximos para las barras de profundidad
+        const maxBidVolume = Math.max(...orderBook.bids.map(bid => parseFloat(bid[1])));
+        const maxAskVolume = Math.max(...orderBook.asks.map(ask => parseFloat(ask[1])));
+
+        return (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-semibold text-zinc-900 dark:text-white">
+                  Order Book
+                </h3>
+                {isRefetching && (
+                  <span className="text-xs text-blue-500 dark:text-blue-400 animate-pulse">
+                    Actualizando...
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-4">
+                <RegresiveCount
+                  ref={countdownRef}
+                  onFinish={handleRefresh}
+                  duration={3}
+                  loadingLabel={`Actualizando ${activeTab === 'bids' ? 'Bids' : 'Asks'}...`}
+                />
+                {responseTime && (
+                  <ResponseTime responseTime={responseTime} />
+                )}
+              </div>
             </div>
-            <div className="flex items-center gap-4">
-              <RegresiveCount
-                ref={countdownRef}
-                onFinish={handleRefresh}
-                duration={3}
-                loadingLabel={`Actualizando ${activeTab === 'bids' ? 'Bids' : 'Asks'}...`}
-              />
-              {responseTime && (
-                <ResponseTime responseTime={responseTime} />
-              )}
-            </div>
-          </div>
-          <div className="w-full max-w-xs">
-            <Select
-              label="Cantidad de órdenes"
-              labelPlacement="outside"
-              placeholder="Seleccionar límite"
-              selectedKeys={new Set([String(limit)])}
-              onSelectionChange={(keys) => {
-                const newLimit = Number(Array.from(keys)[0]);
-                setLimit(newLimit);
-                if (selectedSymbol) {
-                  fetchData(selectedSymbol, newLimit, true);
-                  countdownRef.current?.reset();
-                }
-              }}
-              onOpenChange={(isOpen) => {
-                if (isOpen) {
-                  countdownRef.current?.pause();
-                } else {
-                  countdownRef.current?.resume();
-                }
-              }}
-              isDisabled={(isPending && isInitialLoad) || !selectedSymbol}
-              className="w-full"
-              size="sm"
-              disallowEmptySelection
-            >
-              {LIMIT_OPTIONS.map((value) => (
-                <SelectItem key={String(value)} textValue={`${value} órdenes`}>
-                  {value} órdenes
-                </SelectItem>
-              ))}
-            </Select>
-          </div>
-          <div className="flex gap-4 w-full justify-between items-center h-full">
-            <div className="w-full">
-              <Tabs
-                aria-label="Order book tabs"
-                color="primary"
-                selectedKey={activeTab}
-                onSelectionChange={(key) => setActiveTab(key as string)}
-                classNames={{
-                  cursor: "bg-primary",
-                  tabContent: "group-data-[selected=true]:text-white"
+            <div className="w-full max-w-xs">
+              <Select
+                label="Cantidad de órdenes"
+                labelPlacement="outside"
+                placeholder="Seleccionar límite"
+                selectedKeys={new Set([String(limit)])}
+                onSelectionChange={(keys) => {
+                  const newLimit = Number(Array.from(keys)[0]);
+                  setLimit(newLimit);
+                  if (selectedSymbol) {
+                    fetchData(selectedSymbol, newLimit, true);
+                    countdownRef.current?.reset();
+                  }
                 }}
+                onOpenChange={(isOpen) => {
+                  if (isOpen) {
+                    countdownRef.current?.pause();
+                  } else {
+                    countdownRef.current?.resume();
+                  }
+                }}
+                isDisabled={(isPending && isInitialLoad) || !selectedSymbol}
+                className="w-full"
+                size="sm"
+                disallowEmptySelection
               >
-                <Tab
-                  key="bids"
-                  title={
-                    <span className="font-semibold text-green-600 group-data-[selected=true]:text-white dark:text-green-400">
-                      Bids (Compra)
-                    </span>
-                  }
+                {LIMIT_OPTIONS.map((value) => (
+                  <SelectItem key={String(value)} textValue={`${value} órdenes`}>
+                    {value} órdenes
+                  </SelectItem>
+                ))}
+              </Select>
+            </div>
+            <div className="flex gap-4 w-full justify-between items-center h-full">
+              <div className="w-full">
+                <Tabs
+                  aria-label="Order book tabs"
+                  color="primary"
+                  selectedKey={activeTab}
+                  onSelectionChange={(key) => setActiveTab(key as string)}
+                  classNames={{
+                    cursor: "bg-primary",
+                    tabContent: "group-data-[selected=true]:text-white"
+                  }}
                 >
-                  <Table
-                    aria-label="Tabla de bids"
-                    className="min-w-full"
+                  <Tab
+                    key="bids"
+                    title={
+                      <span className="font-semibold text-green-600 group-data-[selected=true]:text-white dark:text-green-400">
+                        Bids (Compra)
+                      </span>
+                    }
                   >
-                    <TableHeader>
-                      <TableColumn>#</TableColumn>
-                      <TableColumn>PRECIO</TableColumn>
-                      <TableColumn>CANTIDAD</TableColumn>
-                      <TableColumn>ULT. ACTUALIZACIÓN</TableColumn>
+                    <Table
+                      aria-label="Tabla de bids"
+                      className="min-w-full"
+                    >
+                      <TableHeader>
+                        <TableColumn>#</TableColumn>
+                        <TableColumn>PRECIO</TableColumn>
+                        <TableColumn>CANTIDAD</TableColumn>
+                        <TableColumn>VOLUMEN</TableColumn>
+                      </TableHeader>
+                      <TableBody>
+                        {orderBook.bids
+                          .map((bid) => ({
+                            bid,
+                            volume: parseFloat(bid[1]),
+                            volumePercent: (parseFloat(bid[1]) / maxBidVolume) * 100
+                          }))
+                          .sort((a, b) => b.volumePercent - a.volumePercent)
+                          .map(({ bid, volumePercent }, idx) => (
+                            <TableRow key={idx}>
+                              <TableCell className="text-zinc-600 dark:text-zinc-400 font-mono">
+                                {idx + 1}
+                              </TableCell>
+                              <TableCell className="text-green-600 dark:text-green-400 font-mono">
+                                {bid[0]}
+                              </TableCell>
+                              <TableCell className="text-zinc-600 dark:text-zinc-400 font-mono">
+                                {bid[1]}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <Progress
+                                    aria-label={`Volumen ${volumePercent.toFixed(1)}%`}
+                                    value={volumePercent}
+                                    color="success"
+                                    size="sm"
+                                    className="max-w-md"
+                                  />
+                                  <span className="text-xs text-zinc-600 dark:text-zinc-400 min-w-[45px]">
+                                    {volumePercent.toFixed(1)}%
+                                  </span>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                      </TableBody>
+                    </Table>
+                  </Tab>
 
-                    </TableHeader>
-                    <TableBody>
-                      {orderBook.bids.map((bid, idx) => (
-                        <TableRow key={idx}>
-                          <TableCell className="text-zinc-600 dark:text-zinc-400 font-mono">
-                            {idx + 1}
-                          </TableCell>
-                          <TableCell className="text-green-600 dark:text-green-400 font-mono">
-                            {bid[0]}
-                          </TableCell>
-                          <TableCell className="text-zinc-600 dark:text-zinc-400 font-mono">
-                            {bid[1]}
-                          </TableCell>
-                          <TableCell className="text-zinc-600 dark:text-zinc-400 font-mono">
-                            {orderBook.lastUpdateId}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </Tab>
-
-                <Tab
-                  key="asks"
-                  title={
-                    <span className="font-semibold text-red-600 group-data-[selected=true]:text-white dark:text-red-400">
-                      Asks (Venta)
-                    </span>
-                  }
-                >
-                  <Table
-                    aria-label="Tabla de asks"
-                    className="min-w-full"
+                  <Tab
+                    key="asks"
+                    title={
+                      <span className="font-semibold text-red-600 group-data-[selected=true]:text-white dark:text-red-400">
+                        Asks (Venta)
+                      </span>
+                    }
                   >
-                    <TableHeader>
-                      <TableColumn>PRECIO</TableColumn>
-                      <TableColumn>CANTIDAD</TableColumn>
-                    </TableHeader>
-                    <TableBody>
-                      {orderBook.asks.map((ask, idx) => (
-                        <TableRow key={idx}>
-                          <TableCell className="text-red-600 dark:text-red-400 font-mono">
-                            {ask[0]}
-                          </TableCell>
-                          <TableCell className="text-zinc-600 dark:text-zinc-400 font-mono">
-                            {ask[1]}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </Tab>
-              </Tabs>
+                    <Table
+                      aria-label="Tabla de asks"
+                      className="min-w-full"
+                    >
+                      <TableHeader>
+                        <TableColumn>PRECIO</TableColumn>
+                        <TableColumn>CANTIDAD</TableColumn>
+                        <TableColumn>VOLUMEN</TableColumn>
+                      </TableHeader>
+                      <TableBody>
+                        {orderBook.asks
+                          .map((ask) => ({
+                            ask,
+                            volume: parseFloat(ask[1]),
+                            volumePercent: (parseFloat(ask[1]) / maxAskVolume) * 100
+                          }))
+                          .sort((a, b) => b.volumePercent - a.volumePercent)
+                          .map(({ ask, volumePercent }, idx) => (
+                            <TableRow key={idx}>
+                              <TableCell className="text-red-600 dark:text-red-400 font-mono">
+                                {ask[0]}
+                              </TableCell>
+                              <TableCell className="text-zinc-600 dark:text-zinc-400 font-mono">
+                                {ask[1]}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <Progress
+                                    aria-label={`Volumen ${volumePercent.toFixed(1)}%`}
+                                    value={volumePercent}
+                                    color="danger"
+                                    size="sm"
+                                    className="max-w-md"
+                                  />
+                                  <span className="text-xs text-zinc-600 dark:text-zinc-400 min-w-[45px]">
+                                    {volumePercent.toFixed(1)}%
+                                  </span>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                      </TableBody>
+                    </Table>
+                  </Tab>
+                </Tabs>
+              </div>
+            </div>
+            <div className="h-full">
+              <SpreadIndicator orderBook={orderBook} />
             </div>
           </div>
-          <div className="h-full">
-            <SpreadIndicator orderBook={orderBook} />
-          </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
